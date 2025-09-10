@@ -2,7 +2,7 @@ import stripe from "stripe";
 import Booking from "./../models/Bookings.js";
 
 export const stripeWebhooks = async (request, response) => {
-  const stripeInstance = new stripe(process.env.STRIPE_WEBHOOK_SECRET);
+  const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
   const sig = request.headers["stripe-signature"];
 
   let event;
@@ -13,6 +13,7 @@ export const stripeWebhooks = async (request, response) => {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
+    console.log("✅ Stripe event received:", event.type);
   } catch (error) {
     return response.status(400).send(`Webhook Error:${error.message}`);
   }
@@ -25,6 +26,8 @@ export const stripeWebhooks = async (request, response) => {
           payment_intent: paymentIntent.id,
         });
 
+        console.log("✅ Session list:", sessionList.data);
+
         const session = sessionList.data[0];
         const { bookingId } = session.metadata;
 
@@ -32,6 +35,8 @@ export const stripeWebhooks = async (request, response) => {
           isPaid: true,
           paymentLink: "",
         });
+
+        console.log("✅ Booking updated:", updatedBooking);
         break;
       }
 

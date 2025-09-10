@@ -1,6 +1,8 @@
 import { Inngest } from "inngest";
 import User from "../models/User.js";
 import connectDB from "../configs/db.js";
+import Booking from "./../models/Bookings.js";
+import Show from "./../models/Show.js";
 
 await connectDB();
 
@@ -16,10 +18,12 @@ const syncUserCreation = inngest.createFunction(
       const { id, first_name, last_name, email_addresses, image_url } =
         event.data;
 
-      const name =
-        first_name || last_name
-          ? `${first_name || ""} ${last_name || ""}`.trim()
-          : email_addresses[0].email_address.split("@")[0];
+      // const name =
+      //   first_name || last_name
+      //     ? `${first_name || ""} ${last_name || ""}`.trim()
+      //     : email_addresses[0].email_address.split("@")[0];
+
+      const name = first_name + " " + last_name;
 
       const image = image_url || "https://your-default-avatar.png";
 
@@ -27,7 +31,7 @@ const syncUserCreation = inngest.createFunction(
         _id: id,
         email: email_addresses[0].email_address,
         name,
-        image, 
+        image,
       };
 
       await User.create(userData);
@@ -66,4 +70,31 @@ const syncUserUpdation = inngest.createFunction(
   }
 );
 
-export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation];
+/**Inngest Function to cancel booking and release seats of
+ *  show after 10 minutes of booking create if payment it not made */
+const releaseSeatsAndDeleteBooking = inngest.createFunction(
+  { if: "release-seats-delete-booking" },
+  { event: "app/checkpayment" },
+  async ({ event, step }) => {
+    const tenMinutesLater = new Date(Date.now() + 10 * 60 * 1000);
+    await step.sleepUntil("wait-for-10-minutes", tenMinutesLater);
+
+    await step.run("check-payment-status", async () => {
+      const bookingId = event.data.bookingId;
+      const booking = await Booking.findById(bookingId);
+
+      // if payment is not made, release seats and delete booking
+      if (!booking.isPaid) {
+        const show = await Show.findById(booking.show);
+        booking.bookedSeats.forEach((seat) => {
+          delete show.occupiedSeats[seat];
+        });
+        show.markModified("occupiedSeats");
+        await show.save();
+        await Booking.findByIdAndDelete(booking._id);
+      }
+    });
+  }
+);
+
+export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation, releaseSeatsAndDeleteBooking];
