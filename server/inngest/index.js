@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import connectDB from "../configs/db.js";
 import Booking from "./../models/Bookings.js";
 import Show from "./../models/Show.js";
+import sendEmail from "../configs/nodeMailer.js";
 
 await connectDB();
 
@@ -97,4 +98,47 @@ const releaseSeatsAndDeleteBooking = inngest.createFunction(
   }
 );
 
-export const functions = [syncUserCreation, syncUserDeletion, syncUserUpdation, releaseSeatsAndDeleteBooking];
+// Inngest Function to send email when user books a show
+const sendBookingConfirmationEmail = inngest.createFunction(
+  { id: "send-booking-confirmation-email" },
+  { event: "app/show.booked" },
+  async ({ event, step }) => {
+    const { bookingId } = event.data;
+
+    const booking = await Booking.findById(bookingId)
+      .populate({
+        path: "show",
+        populate: { path: "movie", model: "Movie" },
+      })
+      .populate("user");
+
+    await sendEmail({
+      to: booking.user.email,
+      subject: `Payment Confirmation: "${booking.show.movie.title}" booked! `,
+      body: `<div style="font-family: Arial, sans-serif; line-height: 1.5;">
+  <h2>Xin chào ${booking.user.name},</h2>
+  <p>Vé xem phim cho <strong style="color: #F84565;">${
+    booking.show.movie.title
+  }</strong> của bạn đã được xác nhận.</p>
+  <p>
+    <strong>Ngày:</strong> ${new Date(
+      booking.show.showDateTime
+    ).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}<br/>
+    <strong>Giờ:</strong> ${new Date(
+      booking.show.showDateTime
+    ).toLocaleTimeString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+  </p>
+  <p>Chúc bạn có những phút giây xem phim thật vui vẻ! 🍿</p>
+  <p>Cảm ơn bạn đã đặt vé cùng chúng tôi!<br/>— Đội ngũ QuickShow</p>
+</div>`,
+    });
+  }
+);
+
+export const functions = [
+  syncUserCreation,
+  syncUserDeletion,
+  syncUserUpdation,
+  releaseSeatsAndDeleteBooking,
+  sendBookingConfirmationEmail,
+];

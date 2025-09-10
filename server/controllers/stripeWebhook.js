@@ -1,5 +1,6 @@
 import stripe from "stripe";
 import Booking from "./../models/Bookings.js";
+import { inngest } from "./../inngest/index.js";
 
 export const stripeWebhooks = async (request, response) => {
   const stripeInstance = new stripe(process.env.STRIPE_SECRET_KEY);
@@ -13,7 +14,6 @@ export const stripeWebhooks = async (request, response) => {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
-    console.log("✅ Stripe event received:", event.type);
   } catch (error) {
     return response.status(400).send(`Webhook Error:${error.message}`);
   }
@@ -26,7 +26,7 @@ export const stripeWebhooks = async (request, response) => {
           payment_intent: paymentIntent.id,
         });
 
-        console.log("✅ Session list:", sessionList.data);
+        console.log("Session list:", sessionList.data);
 
         const session = sessionList.data[0];
         const { bookingId } = session.metadata;
@@ -36,7 +36,12 @@ export const stripeWebhooks = async (request, response) => {
           paymentLink: "",
         });
 
-        console.log("✅ Booking updated:", updatedBooking);
+        // Send Confirmation Email
+        await inngest({
+          name: "app/show.booked",
+          data: { bookingId },
+        });
+
         break;
       }
 
